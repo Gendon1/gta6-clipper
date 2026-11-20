@@ -18,12 +18,27 @@ const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 const SOURCE = join(BOT_DIR, 'VIDEO.json');
 const TARGET = join(OUTPUT_DIR, 'VIDEO.json');
 
+// A valid entry names a YouTube Shorts video: https://www.youtube.com/shorts/<id>,
+// where <id> is exactly 11 URL-safe characters. Anything else is not a video the
+// house can look up, so fail loudly instead of handing the gate a dead address.
+const SHORTS_URL = /^https:\/\/www\.youtube\.com\/shorts\/([A-Za-z0-9_-]{11})$/;
+
+function shortsUrl(url: unknown): string {
+  if (typeof url !== 'string' || !SHORTS_URL.test(url)) {
+    throw new Error(
+      `VIDEO.json url must be a YouTube Shorts URL (https://www.youtube.com/shorts/<11-character id>), got: ${JSON.stringify(url)}`,
+    );
+  }
+  return url;
+}
+
 mkdirSync(OUTPUT_DIR, { recursive: true });
 try {
+  const video = JSON.parse(readFileSync(SOURCE, 'utf8')) as { url: string };
+  const url = shortsUrl(video.url);
   copyFileSync(SOURCE, TARGET);
-  const video = JSON.parse(readFileSync(TARGET, 'utf8')) as { url: string };
-  console.log(`VIDEO.json copied to ${TARGET}: ${video.url}`);
+  console.log(`VIDEO.json copied to ${TARGET}: ${url}`);
 } catch (err) {
-  console.error(`VIDEO.json could not be copied from ${BOT_DIR}: ${(err as Error).message}`);
+  console.error(`VIDEO.json could not be validated and copied from ${BOT_DIR}: ${(err as Error).message}`);
   process.exit(1);
 }
