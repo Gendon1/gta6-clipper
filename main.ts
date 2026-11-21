@@ -32,12 +32,40 @@ function shortsUrl(url: unknown): string {
   return url;
 }
 
+// VIDEO.json must be a plain object with exactly one key, "url". Anything else
+// (an array, a string, extra keys like "title" or "views") is a malformed entry
+// file, so reject it with a message that names the problem instead of letting a
+// stray field slip through to the gate.
+function parseVideoFile(raw: string): { url: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`VIDEO.json is not valid JSON: ${(err as Error).message}`);
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      `VIDEO.json must be a JSON object like {"url": "https://www.youtube.com/shorts/<id>"}, got: ${JSON.stringify(parsed)}`,
+    );
+  }
+  const keys = Object.keys(parsed);
+  if (keys.length !== 1 || keys[0] !== 'url') {
+    throw new Error(
+      `VIDEO.json must have exactly one key, "url", got keys: ${JSON.stringify(keys)}`,
+    );
+  }
+  return parsed as { url: string };
+}
+
 mkdirSync(OUTPUT_DIR, { recursive: true });
 try {
-  const video = JSON.parse(readFileSync(SOURCE, 'utf8')) as { url: string };
+  const video = parseVideoFile(readFileSync(SOURCE, 'utf8'));
   const url = shortsUrl(video.url);
   copyFileSync(SOURCE, TARGET);
-  console.log(`VIDEO.json copied to ${TARGET}: ${url}`);
+  // Log the video id as well as the full URL so a run's log names the exact
+  // Short the gate will look up, without anyone having to open the file.
+  const videoId = url.slice('https://www.youtube.com/shorts/'.length);
+  console.log(`VIDEO.json copied to ${TARGET}: ${url} (video id ${videoId})`);
 } catch (err) {
   console.error(`VIDEO.json could not be validated and copied from ${BOT_DIR}: ${(err as Error).message}`);
   process.exit(1);
